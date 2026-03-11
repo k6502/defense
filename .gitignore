@@ -151,3 +151,4 @@ cython_debug/
 # End of https://mrkandreev.name/snippets/gitignore-generator/#Rust,Python
 
 training/data/
+models/

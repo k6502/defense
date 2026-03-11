@@ -1,14 +1,21 @@
+from neural import train_epoch, optimize_model, device
+from utils import save_prediction_sample
+from data import validloader, trainloader
 import torch
-from data import dataloader
-from neural import NeuralNetwork, device
 
-model = NeuralNetwork().to(device)
 
-for X, y in dataloader:
-    X, y = X.to(device), y.to(device)
+def main():
+    print(
+        f"Starting execution on {device}, CPU Capabilities: {torch.backends.cpu.get_cpu_capability()}"
+    )
+    print(optimize_model)
 
-    pred = model(X)
+    train_epoch()
 
-    print(f"Input shape: {X.shape}")
-    print(f"Predictions shape: {pred.shape}")
-    break
+    save_prediction_sample(validloader, optimize_model, device, f"examples/epoch.png")
+
+    print("Saved weights to models/aircraft_model.pth")
+
+
+if __name__ == "__main__":
+    main()

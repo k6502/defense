@@ -1,13 +1,53 @@
+import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
+import os
 
-batch_size = 128
+# Systems optimization for Ryzen 5600X
+cores = os.cpu_count() or 1
+num_workers = 4 if cores > 4 else 2
+batch_size = 32
+img_size = 32
 
-# 1. Define transforms FIRST
-transforms = transforms.Compose([transforms.Resize((256, 256)), transforms.ToTensor()])
+pin_memory = torch.cuda.is_available()
 
-dataset = datasets.FGVCAircraft(
-    root="training/data", download=True, transform=transforms
+
+def remove_aircraft_banner(img):
+    """Removes the 20px copyright banner from the bottom of FGVC images."""
+    return img.crop((0, 0, img.width, img.height - 20))
+
+
+data_transforms = transforms.Compose(
+    [
+        transforms.Lambda(remove_aircraft_banner),
+        transforms.Resize((img_size, img_size)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+    ]
 )
 
-dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+train_set = datasets.FGVCAircraft(
+    root="training/data", split="train", download=True, transform=data_transforms
+)
+
+valid_set = datasets.FGVCAircraft(
+    root="training/data", split="val", download=True, transform=data_transforms
+)
+
+trainloader = DataLoader(
+    dataset=train_set,
+    batch_size=batch_size,
+    num_workers=num_workers,
+    shuffle=True,
+    pin_memory=pin_memory,
+    persistent_workers=True if num_workers > 0 else False,
+)
+
+validloader = DataLoader(
+    dataset=valid_set,
+    batch_size=batch_size,
+    num_workers=num_workers,
+    shuffle=False,
+    pin_memory=pin_memory,
+    persistent_workers=True if num_workers > 0 else False,
+)
