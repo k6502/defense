@@ -150,4 +150,4 @@ cython_debug/
 
 # End of https://mrkandreev.name/snippets/gitignore-generator/#Rust,Python
 
-examples/
+training/data/
