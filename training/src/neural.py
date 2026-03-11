@@ -16,7 +16,13 @@ from data import (
 )
 from tqdm import tqdm
 
+from utils import check_sparsity
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+epochs = 10
+min_valid_loss = np.inf
 
 
 class NeuralNetwork(nn.Module):
@@ -37,20 +43,22 @@ class NeuralNetwork(nn.Module):
             nn.MaxPool2d(2),
         )
 
+        # Global Average Pooling: Takes (B, 256, H, W) -> (B, 256, 1, 1)
+        self.gap = nn.AdaptiveAvgPool2d(1)
         self.flatten = nn.Flatten()
 
         self.classifier = nn.Sequential(
-            nn.Linear(1024, 512),
+            nn.Linear(256, 512),
             nn.ReLU(inplace=True),
-            nn.Dropout(p=0.3, inplace=False),
-            nn.Linear(512, 100),
+            nn.Dropout(p=0.3),
+            nn.Linear(512, 102),
         )
 
     def forward(self, x):
         x = self.features(x)
+        x = self.gap(x)
         x = self.flatten(x)
-        logits = self.classifier(x)
-        return logits
+        return self.classifier(x)
 
 
 model = NeuralNetwork().to(device).to(memory_format=torch.channels_last)
@@ -58,14 +66,24 @@ model = NeuralNetwork().to(device).to(memory_format=torch.channels_last)
 optimize_model = torch.compile(model, mode="default", dynamic=False)
 
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(optimize_model.parameters(), lr=1e-3)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
+optimizer = torch.optim.AdamW(
+    optimize_model.parameters(),
+    lr=1e-3,
+    weight_decay=0.01,
+    fused=True,
+)
+
+scheduler = torch.optim.lr_scheduler.OneCycleLR(
+    optimizer,
+    max_lr=1e-3,
+    steps_per_epoch=len(trainloader),
+    epochs=epochs,
+    pct_start=0.3,
+    anneal_strategy="cos",
+)
 
 scaler_type = device.type == "cuda"
 scaler = torch.amp.GradScaler("cuda", enabled=scaler_type)
-
-epochs = 10
-min_valid_loss = np.inf
 
 
 def train_epoch():
@@ -73,7 +91,7 @@ def train_epoch():
 
     print("Warming compiler...")
 
-    dummy_data = torch.randn(32, 3, 32, 32).to(
+    dummy_data = torch.randn(batch_size, 3, 64, 64).to(
         device, memory_format=torch.channels_last
     )
     with torch.amp.autocast(device_type=device.type, dtype=torch.bfloat16):
@@ -107,6 +125,8 @@ def train_epoch():
                 loss.backward()
                 optimizer.step()
 
+            scheduler.step()
+
             train_loss += loss.item()
             train_bar.set_postfix(loss=loss.item())
 
@@ -138,6 +158,8 @@ def train_epoch():
             )
             min_valid_loss = avg_valid_loss
             torch.save(optimize_model.state_dict(), "models/aircraft_model.pth")
+
+    check_sparsity(optimize_model)
 
 
 if __name__ == "__main__":

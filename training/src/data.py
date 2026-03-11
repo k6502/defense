@@ -3,11 +3,9 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 import os
 
-# Systems optimization for Ryzen 5600X
-cores = os.cpu_count() or 1
-num_workers = 4 if cores > 4 else 2
-batch_size = 32
-img_size = 32
+num_workers = os.cpu_count()
+batch_size = 64
+img_size = 64
 
 pin_memory = torch.cuda.is_available()
 
